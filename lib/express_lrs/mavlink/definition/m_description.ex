@@ -4,6 +4,7 @@ defmodule ExpressLrs.Mavlink.Definition.MDescription do
 
   def build_from_tuple_list(_name, attributes) do
     attributes = attributes |> Enum.into(%{})
+
     %__MODULE__{
       value: attributes["value"]
     }

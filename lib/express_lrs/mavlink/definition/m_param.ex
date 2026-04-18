@@ -14,5 +14,4 @@ defmodule ExpressLrs.Mavlink.Definition.MParam do
     :reversed,
     :default
   ]
-
 end

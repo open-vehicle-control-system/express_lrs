@@ -1,8 +1,7 @@
-defmodule OvcsExpressLrsTest do
-  use ExUnit.Case
-  doctest OvcsExpressLrs
+defmodule ExpressLrsTest do
+  use ExUnit.Case, async: true
 
-  test "greets the world" do
-    assert OvcsExpressLrs.hello() == :world
+  test "scaffolded placeholder" do
+    assert true
   end
 end

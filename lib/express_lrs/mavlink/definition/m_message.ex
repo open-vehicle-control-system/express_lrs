@@ -5,21 +5,22 @@ defmodule ExpressLrs.Mavlink.Definition.MMessage do
   defstruct [:id, :name, :description, :base_fields, :extension_fields, parser_options: %{}]
 
   @data_type_size %{
-    "int64_t"   => 8,
-    "uint64_t"  => 8,
-    "double"    => 8,
-    "int32_t"   => 4,
-    "uint32_t"  => 4,
-    "float"     => 4,
-    "int16_t"   => 2,
-    "uint16_t"  => 2,
-    "int8_t"    => 1,
-    "uint8_t"   => 1,
-    "char"      => 1
+    "int64_t" => 8,
+    "uint64_t" => 8,
+    "double" => 8,
+    "int32_t" => 4,
+    "uint32_t" => 4,
+    "float" => 4,
+    "int16_t" => 2,
+    "uint16_t" => 2,
+    "int8_t" => 1,
+    "uint8_t" => 1,
+    "char" => 1
   }
 
   def build_from_tuple_list(_name, attributes) do
     attributes = attributes |> Enum.into(%{})
+
     %__MODULE__{
       id: attributes["id"] |> String.to_integer(),
       name: attributes["name"]
@@ -37,10 +38,11 @@ defmodule ExpressLrs.Mavlink.Definition.MMessage do
         fields = fields ++ [field]
         fields = fields |> Enum.sort_by(fn field -> @data_type_size[field.type] end, :desc)
         %{message | base_fields: fields}
+
       true ->
         fields = message.extension_fields || []
         %{message | extension_fields: fields ++ [field]}
-      end
+    end
   end
 
   def add(message, %ExpressLrs.Mavlink.Definition.MDescription{} = description) do
@@ -52,21 +54,25 @@ defmodule ExpressLrs.Mavlink.Definition.MMessage do
   end
 
   def crc_extra(message) do
-    crc = CRC.crc_init(:crc_16_x_25)
-    |> CRC.crc_update(message.name <> " ")
+    crc =
+      CRC.crc_init(:crc_16_x_25)
+      |> CRC.crc_update(message.name <> " ")
 
-    crc = message.base_fields
-    |> Enum.reduce(crc, fn field, crc ->
-      crc = crc
-      |> CRC.crc_update(field.type <> " ")
-      |> CRC.crc_update(field.name <> " ")
-      case field.array_length do
-        nil -> crc
-        _   -> crc |> CRC.crc_update(<< field.array_length >>)
-      end
-    end)
-    |> CRC.crc_final()
+    crc =
+      message.base_fields
+      |> Enum.reduce(crc, fn field, crc ->
+        crc =
+          crc
+          |> CRC.crc_update(field.type <> " ")
+          |> CRC.crc_update(field.name <> " ")
 
-    bxor((crc &&& 0xFF), (crc >>> 8))
+        case field.array_length do
+          nil -> crc
+          _ -> crc |> CRC.crc_update(<<field.array_length>>)
+        end
+      end)
+      |> CRC.crc_final()
+
+    bxor(crc &&& 0xFF, crc >>> 8)
   end
 end

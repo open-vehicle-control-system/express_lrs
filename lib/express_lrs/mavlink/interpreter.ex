@@ -1,5 +1,5 @@
 defmodule ExpressLrs.Mavlink.Interpreter.State do
-  defstruct [listeners: []]
+  defstruct listeners: []
 end
 
 defmodule ExpressLrs.Mavlink.Interpreter do
@@ -15,21 +15,25 @@ defmodule ExpressLrs.Mavlink.Interpreter do
 
   @spec start_link(nil) :: :ignore | {:error, any()} | {:ok, pid()}
   def start_link(args) do
-    Logger.debug "Starting #{__MODULE__}..."
+    Logger.debug("Starting #{__MODULE__}...")
     GenServer.start_link(__MODULE__, args, name: __MODULE__)
   end
 
   def handle_cast({:new_frame, frame}, state) do
-    message          = Repository.get_message_by_id(frame.message_id)
-    {base_fields, _} = message.base_fields |> Enum.reduce({[], 0}, fn field, {fields, index} ->
-      {value, bytes} = field |> field_value(index, frame.payload)
-      field = %{field | value: value}
-      {fields ++ [field], index + bytes}
-    end)
+    message = Repository.get_message_by_id(frame.message_id)
+
+    {base_fields, _} =
+      message.base_fields
+      |> Enum.reduce({[], 0}, fn field, {fields, index} ->
+        {value, bytes} = field |> field_value(index, frame.payload)
+        field = %{field | value: value}
+        {fields ++ [field], index + bytes}
+      end)
 
     message = %{message | base_fields: base_fields}
 
-    state.listeners |> Enum.each(fn listener ->
+    state.listeners
+    |> Enum.each(fn listener ->
       GenServer.cast(listener, {:mavlink_message, message})
     end)
 
@@ -42,10 +46,11 @@ defmodule ExpressLrs.Mavlink.Interpreter do
 
   def field_value(field, index, data) do
     case field.type do
-      "uint8_t"  ->
+      "uint8_t" ->
         data = data |> String.slice(index, 1) |> append_zeros(1)
         <<data::unsigned-integer-size(8)>> = data
         {data, 1}
+
       "uint16_t" ->
         data = data |> String.slice(index, 2) |> append_zeros(2)
         <<data::little-unsigned-integer-size(16)>> = data
