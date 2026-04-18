@@ -47,27 +47,22 @@ defmodule ExpressLrs.Mavlink.Interpreter do
   def field_value(field, index, data) do
     case field.type do
       "uint8_t" ->
-        data = data |> String.slice(index, 1) |> append_zeros(1)
-        <<data::unsigned-integer-size(8)>> = data
-        {data, 1}
+        <<value::unsigned-integer-size(8)>> = slice_with_padding(data, index, 1)
+        {value, 1}
 
       "uint16_t" ->
-        data = data |> String.slice(index, 2) |> append_zeros(2)
-        <<data::little-unsigned-integer-size(16)>> = data
-        {data, 2}
+        <<value::little-unsigned-integer-size(16)>> = slice_with_padding(data, index, 2)
+        {value, 2}
     end
   end
 
-  def append_zeros(nil, expected_bytes) do
-    append_zeros(<<0x00>>, expected_bytes)
-  end
-
-  def append_zeros(data, expected_bytes) do
-    if byte_size(data) >= expected_bytes do
-      data
-    else
-      append_zeros(<<data::bitstring, 0x00>>, expected_bytes)
-    end
+  # Returns `size` bytes from `data` starting at `index`, zero-padding on the
+  # right if `data` is shorter than expected. MAVLink v2 strips trailing zero
+  # bytes from the payload, so decoders must re-pad before extracting fields.
+  def slice_with_padding(data, index, size) do
+    take = data |> byte_size() |> Kernel.-(index) |> max(0) |> min(size)
+    chunk = if take > 0, do: binary_part(data, index, take), else: <<>>
+    chunk <> :binary.copy(<<0>>, size - take)
   end
 
   def new_frame(frame) do
