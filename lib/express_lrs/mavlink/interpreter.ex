@@ -1,5 +1,7 @@
 defmodule ExpressLrs.Mavlink.Interpreter.State do
-  defstruct listeners: []
+  # `listeners` maps a listener pid to its monitor reference so we can drop
+  # dead listeners when we receive their `:DOWN` message.
+  defstruct listeners: %{}
 end
 
 defmodule ExpressLrs.Mavlink.Interpreter do
@@ -33,6 +35,7 @@ defmodule ExpressLrs.Mavlink.Interpreter do
     message = %{message | base_fields: base_fields}
 
     state.listeners
+    |> Map.keys()
     |> Enum.each(fn listener ->
       GenServer.cast(listener, {:mavlink_message, message})
     end)
@@ -40,8 +43,29 @@ defmodule ExpressLrs.Mavlink.Interpreter do
     {:noreply, state}
   end
 
+  def handle_cast({:register_listener, listener}, state) when is_pid(listener) do
+    if Map.has_key?(state.listeners, listener) do
+      {:noreply, state}
+    else
+      ref = Process.monitor(listener)
+      {:noreply, %{state | listeners: Map.put(state.listeners, listener, ref)}}
+    end
+  end
+
   def handle_cast({:register_listener, listener}, state) do
-    {:noreply, %{state | listeners: state.listeners ++ [listener]}}
+    # Named listener (atom): resolve to pid if possible; otherwise register by
+    # name so the original API still works.
+    case Process.whereis(listener) do
+      nil ->
+        {:noreply, state}
+
+      pid ->
+        handle_cast({:register_listener, pid}, state)
+    end
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, %{state | listeners: Map.delete(state.listeners, pid)}}
   end
 
   def field_value(field, index, data) do
