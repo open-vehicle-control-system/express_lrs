@@ -19,6 +19,7 @@ defmodule ExpressLrs.Mavlink.Definition.MField do
 
   def build_from_tuple_list(_name, attributes) do
     attributes = attributes |> Enum.into(%{})
+
     %__MODULE__{
       type: attributes["type"],
       name: attributes["name"],

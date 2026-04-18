@@ -26,38 +26,55 @@ defmodule ExpressLrs.Mavlink.Definition.Parser do
     {:ok, state}
   end
 
-  def handle_event(:start_element, {"extensions", _attributes}, %{stack: [head | tail]} = state) when head.__struct__ == MMessage do
-    head = %{head | parser_options: head.parser_options |> Map.put(:next_fields_are_extensions, true)}
+  def handle_event(:start_element, {"extensions", _attributes}, %{stack: [head | tail]} = state)
+      when head.__struct__ == MMessage do
+    head = %{
+      head
+      | parser_options: head.parser_options |> Map.put(:next_fields_are_extensions, true)
+    }
+
     {:ok, %{state | stack: [head | tail]}}
   end
 
   def handle_event(:start_element, {name, attributes}, state) do
-    struct_module = case name do
-      "message"     -> MMessage
-      "enum"        -> MEnum
-      "entry"       -> MEntry
-      "field"       -> MField
-      "description" -> MDescription
-      _             -> MGeneric
-    end
+    struct_module =
+      case name do
+        "message" -> MMessage
+        "enum" -> MEnum
+        "entry" -> MEntry
+        "field" -> MField
+        "description" -> MDescription
+        _ -> MGeneric
+      end
+
     resource = struct_module.build_from_tuple_list(name, attributes)
     {:ok, %{state | stack: [resource | state.stack]}}
   end
 
-  def handle_event(:end_element, "extensions", %{stack: [head | tail]} = state) when head.__struct__ == MMessage do
+  def handle_event(:end_element, "extensions", %{stack: [head | tail]} = state)
+      when head.__struct__ == MMessage do
     {:ok, %{state | stack: [head | tail]}}
   end
 
-  def handle_event(:end_element, _name, %{stack: [head | tail]} = state) when length(tail) > 0 do
+  def handle_event(:end_element, _name, %{stack: [head | tail]} = state) when tail != [] do
     [parent | tail] = tail
-    {head, parent}  = case {head.__struct__, parent} do
-      {MGeneric, _}     -> {head, parent}
-      {_, %MGeneric{}}  -> {head, parent}
-      {_, nil}          -> {head, parent}
-      {_, parent}       ->
-        parent = parent |> parent.__struct__.add(head)
-        {head, parent}
-    end
+
+    {head, parent} =
+      case {head.__struct__, parent} do
+        {MGeneric, _} ->
+          {head, parent}
+
+        {_, %MGeneric{}} ->
+          {head, parent}
+
+        {_, nil} ->
+          {head, parent}
+
+        {_, parent} ->
+          parent = parent |> parent.__struct__.add(head)
+          {head, parent}
+      end
+
     head |> add_to_repository(state)
 
     {:ok, %{state | stack: [parent | tail]}}
@@ -74,7 +91,7 @@ defmodule ExpressLrs.Mavlink.Definition.Parser do
   end
 
   def handle_event(:cdata, cdata, state) do
-    IO.inspect("Receive CData #{cdata}")
+    Logger.debug("Receive CData #{cdata}")
     {:ok, state}
   end
 
@@ -91,5 +108,4 @@ defmodule ExpressLrs.Mavlink.Definition.Parser do
   def add_to_repository(_resource, state) do
     {:ok, state}
   end
-
 end

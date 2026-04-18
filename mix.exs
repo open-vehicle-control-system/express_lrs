@@ -22,7 +22,8 @@ defmodule ExpressLrs.MixProject do
     [
       {:circuits_uart, "~> 1.5"},
       {:crc, "~> 0.10"},
-      {:saxy, "~> 1.5"}
+      {:saxy, "~> 1.5"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 end
