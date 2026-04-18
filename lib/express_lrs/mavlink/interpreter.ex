@@ -50,9 +50,53 @@ defmodule ExpressLrs.Mavlink.Interpreter do
         <<value::unsigned-integer-size(8)>> = slice_with_padding(data, index, 1)
         {value, 1}
 
+      "int8_t" ->
+        <<value::signed-integer-size(8)>> = slice_with_padding(data, index, 1)
+        {value, 1}
+
       "uint16_t" ->
         <<value::little-unsigned-integer-size(16)>> = slice_with_padding(data, index, 2)
         {value, 2}
+
+      "int16_t" ->
+        <<value::little-signed-integer-size(16)>> = slice_with_padding(data, index, 2)
+        {value, 2}
+
+      "uint32_t" ->
+        <<value::little-unsigned-integer-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "int32_t" ->
+        <<value::little-signed-integer-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "uint64_t" ->
+        <<value::little-unsigned-integer-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "int64_t" ->
+        <<value::little-signed-integer-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "float" ->
+        <<value::little-float-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "double" ->
+        <<value::little-float-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "char" ->
+        <<value::binary-size(1)>> = slice_with_padding(data, index, 1)
+        {value, 1}
+
+      other ->
+        Logger.warning(
+          "#{__MODULE__}: unsupported MAVLink field type #{inspect(other)} " <>
+            "for field #{inspect(field.name)}; skipping"
+        )
+
+        {nil, 0}
     end
   end
 
