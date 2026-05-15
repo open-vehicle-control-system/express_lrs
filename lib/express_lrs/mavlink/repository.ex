@@ -41,7 +41,7 @@ defmodule ExpressLrs.Mavlink.Repository do
   end
 
   def handle_call({:get_enum_by_name, name}, _from, state) do
-    {:reply, state.enum_by_name[name], state}
+    {:reply, state.enums_by_name[name], state}
   end
 
   def get_message_by_id(id) do

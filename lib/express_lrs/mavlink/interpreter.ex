@@ -1,5 +1,7 @@
 defmodule ExpressLrs.Mavlink.Interpreter.State do
-  defstruct listeners: []
+  # `listeners` maps a listener pid to its monitor reference so we can drop
+  # dead listeners when we receive their `:DOWN` message.
+  defstruct listeners: %{}
 end
 
 defmodule ExpressLrs.Mavlink.Interpreter do
@@ -33,6 +35,7 @@ defmodule ExpressLrs.Mavlink.Interpreter do
     message = %{message | base_fields: base_fields}
 
     state.listeners
+    |> Map.keys()
     |> Enum.each(fn listener ->
       GenServer.cast(listener, {:mavlink_message, message})
     end)
@@ -40,34 +43,94 @@ defmodule ExpressLrs.Mavlink.Interpreter do
     {:noreply, state}
   end
 
+  def handle_cast({:register_listener, listener}, state) when is_pid(listener) do
+    if Map.has_key?(state.listeners, listener) do
+      {:noreply, state}
+    else
+      ref = Process.monitor(listener)
+      {:noreply, %{state | listeners: Map.put(state.listeners, listener, ref)}}
+    end
+  end
+
   def handle_cast({:register_listener, listener}, state) do
-    {:noreply, %{state | listeners: state.listeners ++ [listener]}}
+    # Named listener (atom): resolve to pid if possible; otherwise register by
+    # name so the original API still works.
+    case Process.whereis(listener) do
+      nil ->
+        {:noreply, state}
+
+      pid ->
+        handle_cast({:register_listener, pid}, state)
+    end
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, %{state | listeners: Map.delete(state.listeners, pid)}}
   end
 
   def field_value(field, index, data) do
     case field.type do
       "uint8_t" ->
-        data = data |> String.slice(index, 1) |> append_zeros(1)
-        <<data::unsigned-integer-size(8)>> = data
-        {data, 1}
+        <<value::unsigned-integer-size(8)>> = slice_with_padding(data, index, 1)
+        {value, 1}
+
+      "int8_t" ->
+        <<value::signed-integer-size(8)>> = slice_with_padding(data, index, 1)
+        {value, 1}
 
       "uint16_t" ->
-        data = data |> String.slice(index, 2) |> append_zeros(2)
-        <<data::little-unsigned-integer-size(16)>> = data
-        {data, 2}
+        <<value::little-unsigned-integer-size(16)>> = slice_with_padding(data, index, 2)
+        {value, 2}
+
+      "int16_t" ->
+        <<value::little-signed-integer-size(16)>> = slice_with_padding(data, index, 2)
+        {value, 2}
+
+      "uint32_t" ->
+        <<value::little-unsigned-integer-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "int32_t" ->
+        <<value::little-signed-integer-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "uint64_t" ->
+        <<value::little-unsigned-integer-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "int64_t" ->
+        <<value::little-signed-integer-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "float" ->
+        <<value::little-float-size(32)>> = slice_with_padding(data, index, 4)
+        {value, 4}
+
+      "double" ->
+        <<value::little-float-size(64)>> = slice_with_padding(data, index, 8)
+        {value, 8}
+
+      "char" ->
+        <<value::binary-size(1)>> = slice_with_padding(data, index, 1)
+        {value, 1}
+
+      other ->
+        Logger.warning(
+          "#{__MODULE__}: unsupported MAVLink field type #{inspect(other)} " <>
+            "for field #{inspect(field.name)}; skipping"
+        )
+
+        {nil, 0}
     end
   end
 
-  def append_zeros(nil, expected_bytes) do
-    append_zeros(<<0x00>>, expected_bytes)
-  end
-
-  def append_zeros(data, expected_bytes) do
-    if byte_size(data) >= expected_bytes do
-      data
-    else
-      append_zeros(<<data::bitstring, 0x00>>, expected_bytes)
-    end
+  # Returns `size` bytes from `data` starting at `index`, zero-padding on the
+  # right if `data` is shorter than expected. MAVLink v2 strips trailing zero
+  # bytes from the payload, so decoders must re-pad before extracting fields.
+  def slice_with_padding(data, index, size) do
+    take = data |> byte_size() |> Kernel.-(index) |> max(0) |> min(size)
+    chunk = if take > 0, do: binary_part(data, index, take), else: <<>>
+    chunk <> :binary.copy(<<0>>, size - take)
   end
 
   def new_frame(frame) do
