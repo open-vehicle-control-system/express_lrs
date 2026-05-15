@@ -70,7 +70,12 @@ defmodule ExpressLrs.Mavlink.FrameTest do
 
     test "is sensitive to payload changes" do
       body_a = heartbeat_body()
-      body_b = heartbeat_body() |> :binary.bin_to_list() |> List.replace_at(-1, 99) |> :binary.list_to_bin()
+
+      body_b =
+        heartbeat_body()
+        |> :binary.bin_to_list()
+        |> List.replace_at(-1, 99)
+        |> :binary.list_to_bin()
 
       crc_a = Frame.crc(%Frame{raw: body_a <> <<0, 0>>}, @heartbeat_crc_extra)
       crc_b = Frame.crc(%Frame{raw: body_b <> <<0, 0>>}, @heartbeat_crc_extra)

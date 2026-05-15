@@ -80,6 +80,7 @@ defmodule ExpressLrs.Mavlink.InterpreterTest do
 
     test "int64_t decodes little-endian signed i64" do
       field = %MField{type: "int64_t", name: "s"}
+
       assert Interpreter.field_value(field, 0, <<0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF>>) ==
                {-1, 8}
     end
