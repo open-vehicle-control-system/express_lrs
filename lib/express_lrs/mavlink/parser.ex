@@ -72,26 +72,32 @@ defmodule ExpressLrs.Mavlink.Parser do
       when byte_size(state.buffer) >= @mavlink_v2_minimum_packet_length do
     <<magic_candidate::unsigned-integer-size(8), buffer_candidate::bitstring>> = state.buffer
 
-    state =
-      case magic_candidate do
-        @mavlink_v2_magic ->
-          {frame_candidate, buffer} = buffer_candidate |> extract_frame_candidate()
+    case magic_candidate do
+      @mavlink_v2_magic ->
+        case extract_frame_candidate(buffer_candidate) do
+          # Magic byte seen but the full frame hasn't arrived yet. Keep
+          # the buffer intact (including the magic byte) and wait for the
+          # next chunk — MAVLink frames routinely straddle UART read
+          # boundaries, and discarding the partial here dropped the frame
+          # and desynced the byte stream that followed.
+          {nil, _rest} ->
+            state
 
-          state =
-            frame_candidate
-            |> Frame.build_from_raw_data()
-            |> compute_crc()
-            |> publish_frame(state)
+          # Full frame present: parse it, advance past it, keep scanning
+          # the remainder for more frames.
+          {frame_candidate, rest} ->
+            state =
+              frame_candidate
+              |> Frame.build_from_raw_data()
+              |> compute_crc()
+              |> publish_frame(state)
 
-          state = %{state | buffer: buffer}
-          search_complete_frame_in_buffer(state)
+            search_complete_frame_in_buffer(%{state | buffer: rest})
+        end
 
-        _ ->
-          state = %{state | buffer: buffer_candidate}
-          search_complete_frame_in_buffer(state)
-      end
-
-    state
+      _ ->
+        search_complete_frame_in_buffer(%{state | buffer: buffer_candidate})
+    end
   end
 
   def search_complete_frame_in_buffer(state) do

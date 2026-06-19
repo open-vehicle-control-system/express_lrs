@@ -81,6 +81,29 @@ defmodule ExpressLrs.Mavlink.ParserTest do
     assert after_state.valid_frames_count == before_state.valid_frames_count + 1
   end
 
+  test "a frame split across two new_bytes/1 calls still parses" do
+    payload = <<0::size(96)>>
+    bytes = build_valid_frame(@message_id, payload)
+    # Split mid-frame, past the 12-byte minimum so the partial reaches the
+    # magic-byte branch — this is the case that used to be counted invalid
+    # and discarded, dropping every frame that straddled a UART read.
+    <<part1::binary-size(15), part2::binary>> = bytes
+
+    before_state = parser_state()
+
+    Parser.new_bytes(part1)
+    mid_state = parser_state()
+    # The partial frame must wait, not be discarded or miscounted.
+    assert mid_state.valid_frames_count == before_state.valid_frames_count
+    assert mid_state.invalid_frames_count == before_state.invalid_frames_count
+
+    Parser.new_bytes(part2)
+    after_state = parser_state()
+    assert after_state.valid_frames_count == before_state.valid_frames_count + 1
+    assert after_state.invalid_frames_count == before_state.invalid_frames_count
+    assert after_state.invalid_crcs_count == before_state.invalid_crcs_count
+  end
+
   # Using `import Bitwise` at the top would bleed into the test module; a
   # local alias keeps the import scope tight.
   defp bxor(a, b), do: Bitwise.bxor(a, b)
